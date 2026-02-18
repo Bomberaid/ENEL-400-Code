@@ -4,10 +4,10 @@
 // const char* ssid = "airuc-guest";
 // const char* password = "";
 
-const char* ssid = "alvinkhuu";
-const char* password = "AlvinKhuu";
+const char* ssid = "Fi";
+const char* password = "gN5ehgN%";
 
-const char* RECEIVER_IP = "10.13.33.169";
+const char* RECEIVER_IP = "10.0.0.115";
 const uint16_t RECEIVER_PORT = 5000;
 
 WiFiUDP udp;
@@ -44,8 +44,7 @@ void loop() {
 
   char msg[120];
   snprintf(msg, sizeof(msg), 
-           "Packet #%lu | Joystick: %d",
-           (unsigned long)counter++,
+           "%d",
            joystickValue);
 
   udp.beginPacket(RECEIVER_IP, RECEIVER_PORT);
