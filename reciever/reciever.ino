@@ -7,6 +7,7 @@ const char* ssid = "alvinkhuu";
 const char* password = "AlvinKhuu";
 
 const char* SERVER_URL = "http://209.38.135.76/movement";
+HTTPClient http;
 
 const int forwardMotorPin = 25;
 const int reverseMotorPin = 26;
@@ -32,7 +33,7 @@ float filteredX = xCenter;
 
 int lastServoAngle = centerAngle;
 
-unsigned long lastUpdate = 0;
+unsigned long lastUpdate = 20;
 const int updateInterval = 5;
 
 void setup() {
@@ -64,7 +65,7 @@ void setup() {
 }
 
 void servoCode(int raw) {
-  filteredX = 0.70 * filteredX + 0.30 * raw;
+  filteredX = 0.85 * filteredX + 0.15 * raw;
   int xSmooth = (int)filteredX;
 
   int error = xSmooth - xCenter;
@@ -83,7 +84,7 @@ void servoCode(int raw) {
   }
 
   if (millis() - lastUpdate >= updateInterval) {
-    if (abs(servoAngle - lastServoAngle) >= 1) {
+    if (abs(servoAngle - lastServoAngle) >= 2) {
       steeringServo.write(servoAngle);
       lastServoAngle = servoAngle;
     }
@@ -97,10 +98,8 @@ void servoCode(int raw) {
 void loop() {
 
   if (WiFi.status() == WL_CONNECTED) {
-
-    HTTPClient http;
     http.begin(SERVER_URL);
-
+    http.addHeader("Connection", "keep-alive");
     int httpCode = http.GET();
 
     if (httpCode == HTTP_CODE_OK) {
@@ -160,5 +159,5 @@ void loop() {
     http.end();
   }
 
-  delay(100);   // polling rate
+  //delay(1);   // polling rate
 }
