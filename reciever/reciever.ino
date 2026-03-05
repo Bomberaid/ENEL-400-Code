@@ -1,13 +1,14 @@
 #include <WiFi.h>
-#include <HTTPClient.h>
+#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
 
 const char* ssid = "alvinkhuu";
 const char* password = "AlvinKhuu";
 
-const char* SERVER_URL = "http://209.38.135.76/movement";
-HTTPClient http;
+const char* WS_HOST = "209.38.135.76";
+const int WS_PORT = 80;
+const char* WS_PATH = "/ws";
 
 const int forwardMotorPin = 25;
 const int reverseMotorPin = 26;
@@ -30,38 +31,41 @@ const int centerAngle = 90;
 const int rightAngle = 110;
 
 float filteredX = xCenter;
-
 int lastServoAngle = centerAngle;
-
 unsigned long lastUpdate = 20;
-const int updateInterval = 5;
+const int updateInterval = 20;
 
-void setup() {
-  Serial.begin(115200);
-  delay(500);
+// Latest received values
+int latestServoValue = xCenter;
+int latestMotorValue = 1950;
 
-  pinMode(forwardMotorPin, OUTPUT);
-  pinMode(reverseMotorPin, OUTPUT);
-  pinMode(forwardEnablePin, OUTPUT);
-  pinMode(reverseEnablePin, OUTPUT);
+WebSocketsClient webSocket;
+bool wsConnected = false;
 
-  steeringServo.setPeriodHertz(50);
-  steeringServo.attach(servoPin, 500, 2500);
-  steeringServo.write(centerAngle);
+void motorCode(int motor_value) {
+  const int center = 1950;
+  const int deadzone = 100;
+  int duty = 0;
 
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.begin(ssid, password);
-
-  Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(250);
-    Serial.print(".");
+  if (motor_value > center + deadzone) {
+    duty = map(motor_value, center, 4095, 0, motorDutyCycleLimit);
+    analogWrite(forwardMotorPin, duty);
+    digitalWrite(forwardEnablePin, HIGH);
+    digitalWrite(reverseEnablePin, HIGH);
   }
-
-  Serial.println("\nConnected!");
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());
+  else if (motor_value < center - deadzone) {
+    duty = map(motor_value, 0, center, motorDutyCycleLimit, 0);
+    analogWrite(reverseMotorPin, duty);
+    digitalWrite(forwardEnablePin, HIGH);
+    digitalWrite(reverseEnablePin, HIGH);
+  }
+  else {
+    duty = 0;
+    analogWrite(forwardMotorPin, 0);
+    analogWrite(reverseMotorPin, 0);
+    digitalWrite(forwardEnablePin, LOW);
+    digitalWrite(reverseEnablePin, LOW);
+  }
 }
 
 void servoCode(int raw) {
@@ -90,74 +94,77 @@ void servoCode(int raw) {
     }
     lastUpdate = millis();
   }
+}
 
-  Serial.print("Servo angle: ");
-  Serial.println(servoAngle);
+void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
+  switch (type) {
+
+    case WStype_CONNECTED:
+      Serial.println("WebSocket connected");
+      wsConnected = true;
+      break;
+
+    case WStype_DISCONNECTED:
+      Serial.println("WebSocket disconnected");
+      wsConnected = false;
+      // Safe stop on disconnect
+      analogWrite(forwardMotorPin, 0);
+      analogWrite(reverseMotorPin, 0);
+      digitalWrite(forwardEnablePin, LOW);
+      digitalWrite(reverseEnablePin, LOW);
+      steeringServo.write(centerAngle);
+      break;
+
+    case WStype_TEXT:
+      StaticJsonDocument<200> doc;
+      DeserializationError err = deserializeJson(doc, payload, length);
+      if (!err) {
+        latestMotorValue = doc["up/down"];
+        latestServoValue = doc["left/right"];
+      }
+      break;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  pinMode(forwardMotorPin, OUTPUT);
+  pinMode(reverseMotorPin, OUTPUT);
+  pinMode(forwardEnablePin, OUTPUT);
+  pinMode(reverseEnablePin, OUTPUT);
+
+  steeringServo.setPeriodHertz(50);
+  steeringServo.attach(servoPin, 500, 2500);
+  steeringServo.write(centerAngle);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(ssid, password);
+
+  Serial.print("Connecting");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(250);
+    Serial.print(".");
+  }
+
+  Serial.println("\nConnected!");
+
+  webSocket.begin(WS_HOST, WS_PORT, WS_PATH);
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(2000);
+  webSocket.enableHeartbeat(15000, 3000, 2);
 }
 
 void loop() {
+  webSocket.loop();  // handles all WS communication
 
-  if (WiFi.status() == WL_CONNECTED) {
-    http.begin(SERVER_URL);
-    http.addHeader("Connection", "keep-alive");
-    int httpCode = http.GET();
-
-    if (httpCode == HTTP_CODE_OK) {
-
-      String payload = http.getString();
-      Serial.println(payload);
-
-      // Parse JSON
-      StaticJsonDocument<200> doc;
-      DeserializationError err = deserializeJson(doc, payload);
-
-      if (!err) {
-        int motor_value = doc["up/down"];
-        int servo_value = doc["left/right"];
-        int center = 1950;
-        int deadzone = 100;
-
-        int duty = 0;
-
-        if (motor_value > center + deadzone) {
-            // Set direction forward
-            duty = map(motor_value, center, 4095, 0, motorDutyCycleLimit);
-            analogWrite(forwardMotorPin, duty);
-
-            // Both enable pins must be on to enable PWM mode on motor driver.
-            digitalWrite(forwardEnablePin, HIGH);
-            digitalWrite(reverseEnablePin, HIGH);
-        }
-        else if (motor_value < center - deadzone) {
-            duty = map(motor_value, 0, center, motorDutyCycleLimit, 0);
-            analogWrite(reverseMotorPin, duty);
-
-            digitalWrite(forwardEnablePin, HIGH);
-            digitalWrite(reverseEnablePin, HIGH);
-        }
-        else {
-            duty = 0;  // stop
-            analogWrite(forwardMotorPin, duty);
-            analogWrite(reverseMotorPin, duty);
-
-            digitalWrite(forwardEnablePin, LOW);
-            digitalWrite(reverseEnablePin, LOW);
-        }
-        Serial.println(duty);
-
-        servoCode(servo_value);
-      }
-      else {
-        Serial.println("JSON parse failed");
-      }
-    }
-    else {
-      Serial.print("HTTP error: ");
-      Serial.println(httpCode);
-    }
-
-    http.end();
-  }
-
-  //delay(1);   // polling rate
+  // Always drive servo/motor from latest received values
+  servoCode(latestServoValue);
+  motorCode(latestMotorValue);
+  Serial.print("Servo Value: ")
+  Serial.println(latestServoValue);
+  Serial.print("Motor Value: ")
+  Serial.println(latestMotorValue);
 }
