@@ -1,26 +1,18 @@
 #include <WiFi.h>
-#include <WiFiUdp.h>
-
-// const char* ssid = "airuc-guest";
-// const char* password = "";
+#include <HTTPClient.h>
 
 const char* ssid = "Fi";
 const char* password = "gN5ehgN%";
 
-const char* RECEIVER_IP = "10.0.0.115";
-const uint16_t RECEIVER_PORT = 5000;
+// 🔴 CHANGE to your computer's IP running Flask
+const char* serverURL = "http://127.0.0.1:5000/movement";
 
-WiFiUDP udp;
-uint32_t counter = 0;
-
-// ⚠️ Change to a valid ADC pin if 16 doesn't work
 const int joystickPin = 32;
 
 void setup() {
   Serial.begin(115200);
   delay(500);
 
-  // Setup joystick pin
   pinMode(joystickPin, INPUT);
 
   WiFi.mode(WIFI_STA);
@@ -34,23 +26,46 @@ void setup() {
   }
 
   Serial.println("\nConnected!");
-  Serial.print("Sender IP: ");
+  Serial.print("ESP32 IP: ");
   Serial.println(WiFi.localIP());
 }
 
 void loop() {
-  // Read joystick value (0–4095 for ESP32)
-  int joystickValue = analogRead(joystickPin);
 
-  char msg[120];
-  snprintf(msg, sizeof(msg), 
-           "%d",
-           joystickValue);
+  if (WiFi.status() == WL_CONNECTED) {
 
-  udp.beginPacket(RECEIVER_IP, RECEIVER_PORT);
-  udp.print(msg);
-  udp.endPacket();
+    int joystickValue = analogRead(joystickPin);
 
-  Serial.println(msg);
-  delay(100);  // Faster updates for joystick
+    // Example second axis (replace later)
+    int leftRight = 10;
+
+    HTTPClient http;
+    http.begin(serverURL);
+
+    // ✅ IMPORTANT: Tell Flask this is JSON
+    http.addHeader("Content-Type", "application/json");
+
+    // Build JSON body
+    String json = String("{\"up/down\":") +
+                  joystickValue +
+                  ",\"left/right\":" +
+                  leftRight +
+                  "}";
+
+    // Send POST request
+    int responseCode = http.POST(json);
+
+    Serial.print("Sent: ");
+    Serial.println(json);
+
+    Serial.print("Response code: ");
+    Serial.println(responseCode);
+
+    http.end();
+  }
+  else {
+    Serial.println("WiFi disconnected");
+  }
+
+  delay(100);   // 10 updates/sec
 }
