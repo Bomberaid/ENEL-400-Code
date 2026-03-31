@@ -18,6 +18,14 @@ int lastJoystickValue = -1;
 int lastServoValue = -1;
 const int changeThreshold = 20;
 
+// New variables
+int speed = 0;
+String air = "Good";
+int temperature = 25;
+float kp = 2.0;
+float ki = 0.5;
+float kd = 0.1;
+
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
@@ -70,8 +78,14 @@ void loop() {
         abs(servoValue - lastServoValue) >= changeThreshold) {
 
       String json = "{";
+      json += "\"up/down\": " + String(joystickValue) + ",";
       json += "\"left/right\": " + String(servoValue) + ",";
-      json += "\"up/down\": " + String(joystickValue);
+      json += "\"speed\": " + String(speed) + ",";
+      json += "\"air\": \"" + air + "\",";
+      json += "\"temperature\": " + String(temperature) + ",";
+      json += "\"kp\": " + String(kp, 2) + ",";
+      json += "\"ki\": " + String(ki, 2) + ",";
+      json += "\"kd\": " + String(kd, 2);
       json += "}";
 
       webSocket.sendTXT(json);
