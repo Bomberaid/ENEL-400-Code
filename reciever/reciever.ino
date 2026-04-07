@@ -24,7 +24,7 @@ const int xCenter = 1940;
 const int xMax = 4095;
 
 const int deadZone = 120;
-const int centerLockZone = 180;
+const int centerLockZone = 150;
 
 const int leftAngle = 70;
 const int centerAngle = 90;
@@ -33,7 +33,7 @@ const int rightAngle = 110;
 float filteredX = xCenter;
 int lastServoAngle = centerAngle;
 unsigned long lastUpdate = 20;
-const int updateInterval = 20;
+const int updateInterval = 15;
 
 // Latest received values
 int latestServoValue = xCenter;
@@ -69,7 +69,7 @@ void motorCode(int motor_value) {
 }
 
 void servoCode(int raw) {
-  filteredX = 0.85 * filteredX + 0.15 * raw;
+  filteredX = 0.75 * filteredX + 0.25 * raw;
   int xSmooth = (int)filteredX;
 
   int error = xSmooth - xCenter;
@@ -163,8 +163,8 @@ void loop() {
   // Always drive servo/motor from latest received values
   servoCode(latestServoValue);
   motorCode(latestMotorValue);
-  Serial.print("Servo Value: ")
+  Serial.print("Servo Value: ");
   Serial.println(latestServoValue);
-  Serial.print("Motor Value: ")
+  Serial.print("Motor Value: ");
   Serial.println(latestMotorValue);
 }
